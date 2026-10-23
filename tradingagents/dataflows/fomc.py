@@ -46,12 +46,14 @@ def schedule_note(as_of_date: str) -> str:
     A decision on the analysis date counts as upcoming: the statement is
     released at 14:00 ET, after a run made that day.
     """
-    if as_of_date < FOMC_MEETINGS[0][0]:
+    day = str(as_of_date)[:10]  # compare by day, whatever time part a caller adds
+    if day < FOMC_MEETINGS[0][0]:
         return ""
-    past = [m for m in FOMC_MEETINGS if m[1] < as_of_date]
-    upcoming = [m for m in FOMC_MEETINGS if m[1] >= as_of_date][:UPCOMING]
+    past = [m for m in FOMC_MEETINGS if m[1] < day]
+    upcoming = [m for m in FOMC_MEETINGS if m[1] >= day][:UPCOMING]
     lines = []
-    if past:
+    # Past the table the meetings since its end are unknown, so its last one is not "the last".
+    if past and upcoming:
         lines.append(f"Last FOMC decision: {past[-1][1]}.")
     if upcoming:
         lines.append("Next scheduled FOMC decisions: "
