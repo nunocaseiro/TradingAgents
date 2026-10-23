@@ -35,10 +35,20 @@ logger = logging.getLogger(__name__)
 
 _TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 _FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
+_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 
 # A filing history only changes when something new is filed, so one fetch per
 # company per day serves every date a run asks about.
 _CACHE_TTL_SECONDS = 24 * 60 * 60
+
+# A day-old cache misses a report filed since it was fetched, so the filing index,
+# which is small, is checked first. It is kept for a few minutes so one run's
+# statement calls read it once.
+_SUBMISSIONS_TTL_SECONDS = 10 * 60
+_SUBMISSIONS_MEMO: dict[str, tuple[float, dict]] = {}
+
+# The filings that add statement facts; amendments ("10-Q/A") count too.
+_REPORT_FORMS = ("10-Q", "10-K", "20-F", "40-F")
 
 # Line items, each with the tags filers use for it, best first. First match wins
 # and values are never summed across tags: a company reporting revenue under two
@@ -119,11 +129,15 @@ def _fetch_json(url: str) -> dict:
         raise VendorUnavailableError("SEC EDGAR returned an unreadable response") from exc
 
 
-def _cached_json(url: str, name: str) -> dict:
+def _cached_json(url: str, name: str, is_current=None) -> dict:
+    """``url``'s document, from a cache under a day old when ``is_current(cached, fetched_day)`` accepts it."""
     path = Path(get_config()["data_cache_dir"]) / "sec_edgar" / name
     if path.exists() and time.time() - path.stat().st_mtime < _CACHE_TTL_SECONDS:
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            cached = json.loads(path.read_text(encoding="utf-8"))
+            fetched_day = datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d")
+            if is_current is None or is_current(cached, fetched_day):
+                return cached
         except ValueError:
             pass  # a truncated file is a miss, not a failure
     data = _fetch_json(url)
@@ -140,6 +154,46 @@ def cik_for(ticker: str) -> str | None:
         if entry.get("ticker", "").upper() == wanted:
             return f"{int(entry['cik_str']):010d}"
     return None
+
+
+def _latest_report_date(cik: str) -> str | None:
+    """The filing date of the company's latest 10-Q/10-K (or amendment), or None if unknown.
+
+    Unknown is not an error: the cached facts are served as before.
+    """
+    memo = _SUBMISSIONS_MEMO.get(cik)
+    if memo is None or time.time() - memo[0] >= _SUBMISSIONS_TTL_SECONDS:
+        try:
+            memo = (time.time(), _fetch_json(_SUBMISSIONS_URL.format(cik=cik)))
+        except VendorUnavailableError:
+            return None
+        _SUBMISSIONS_MEMO[cik] = memo
+    recent = (memo[1].get("filings") or {}).get("recent") or {}
+    dates = [filed for form, filed in zip(recent.get("form") or [], recent.get("filingDate") or [], strict=False)
+             if form.startswith(_REPORT_FORMS)]
+    return max(dates, default=None)
+
+
+def _company_facts(cik: str) -> dict:
+    """The company's facts, refetched when it filed a report newer than every cached fact.
+
+    A cache fetched after the report's filing day is kept even so: some reports
+    (an amendment with no financial data) add no facts, and refetching for them
+    would download the facts on every run.
+    """
+    latest = _latest_report_date(cik)
+
+    def is_current(facts: dict, fetched_day: str) -> bool:
+        if latest is None or fetched_day > latest:
+            return True
+        newest = max((fact.get("filed", "")
+                      for taxonomy in (facts.get("facts") or {}).values()
+                      for concept in taxonomy.values()
+                      for unit_values in (concept.get("units") or {}).values()
+                      for fact in unit_values), default="")
+        return newest >= latest
+
+    return _cached_json(_FACTS_URL.format(cik=cik), f"CIK{cik}.json", is_current)
 
 
 def _span_index(fact: dict, spans: tuple[tuple[int, int], ...]) -> int | None:
@@ -193,7 +247,7 @@ def _statement(kind: str, ticker: str, freq: str, as_of_date: str, title: str) -
     if cik is None:
         raise NoMarketDataError(ticker, ticker, "not a US SEC filer")
 
-    facts = _cached_json(_FACTS_URL.format(cik=cik), f"CIK{cik}.json")
+    facts = _company_facts(cik)
     us_gaap = (facts.get("facts") or {}).get("us-gaap")
     if not us_gaap:
         raise NoMarketDataError(ticker, ticker, "US filer with no us-gaap facts")
