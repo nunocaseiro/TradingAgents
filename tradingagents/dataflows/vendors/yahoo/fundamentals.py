@@ -1,7 +1,10 @@
+from datetime import UTC, datetime
 from typing import Annotated
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import yfinance as yf
 
+from tradingagents.dataflows import date_window
 from tradingagents.dataflows.date_window import (
     withhold_live_profile,
     withhold_undated_statements,
@@ -101,7 +104,96 @@ def get_fundamentals(
     if not lines:
         raise_for_empty(ticker, canonical, "fundamental fields")
 
-    return f"# Company Fundamentals for {canonical}\n\n" + "\n".join(lines)
+    report = f"# Company Fundamentals for {canonical}\n\n" + "\n".join(lines)
+    # Asked only for a symbol that reports earnings: funds, indices and crypto
+    # have no calendar, and the request would be wasted.
+    calendar = _earnings_calendar(canonical) if info.get("earningsTimestamp") else {}
+    outlook = _earnings_and_consensus(info, calendar, quote, main, reported)
+    if outlook:
+        report += "\n\n## Next Earnings and Analyst Consensus\n\n" + "\n".join(outlook)
+    return report
+
+
+def _earnings_calendar(canonical: str) -> dict:
+    """Yahoo's earnings calendar for ``canonical``, or {} when it has none or cannot be reached.
+
+    The calendar only adds the quarter's estimates to the overview, so a failed
+    request leaves them out rather than costing the overview.
+    """
+    try:
+        calendar = yf_retry(lambda: yf.Ticker(canonical).calendar)
+    except VendorUnavailableError:
+        return {}
+    return calendar if isinstance(calendar, dict) else {}
+
+
+def _exchange_zone(info: dict):
+    """The listing exchange's time zone, so dates fall on the exchange's day; UTC when unknown."""
+    try:
+        return ZoneInfo(info.get("exchangeTimezoneName") or "UTC")
+    except (ZoneInfoNotFoundError, ValueError):
+        return UTC
+
+
+def _with_unit(value, currency):
+    return f"{value} {currency}" if currency else f"{value}"
+
+
+def _estimate(calendar: dict, name: str, currency) -> str | None:
+    """'average CUR (low x, high y)' for one of the calendar's estimates, or None."""
+    average = calendar.get(f"{name} Average")
+    if average is None:
+        return None
+    low, high = calendar.get(f"{name} Low"), calendar.get(f"{name} High")
+    spread = f" (low {low}, high {high})" if low is not None and high is not None else ""
+    return _with_unit(average, currency) + spread
+
+
+def _earnings_and_consensus(info: dict, calendar: dict, quote, main, reported) -> list[str]:
+    """The next earnings date, the quarter's estimates and the analyst consensus.
+
+    Price targets are in the quote currency like the other price levels; EPS
+    estimates in its main unit like the EPS fields; revenue in the reporting
+    currency like the income figures.
+    """
+    zone = _exchange_zone(info)
+    lines = []
+
+    timestamp = info.get("earningsTimestamp")
+    if timestamp:
+        day = datetime.fromtimestamp(timestamp, tz=UTC).astimezone(zone).strftime("%Y-%m-%d")
+        if day < date_window.get_current_date():
+            lines.append(f"Latest Earnings Date: {day} (already reported; Yahoo has no later date yet)")
+        else:
+            status = {False: " (confirmed by Yahoo)",
+                      True: " (estimated by Yahoo, not confirmed)"}.get(info.get("isEarningsDateEstimate"), "")
+            lines.append(f"Next Earnings Date: {day}{status}")
+            call = info.get("earningsCallTimestampStart")
+            if call:
+                call_time = datetime.fromtimestamp(call, tz=UTC).astimezone(zone)
+                if call_time.strftime("%Y-%m-%d") == day:
+                    lines.append(f"Earnings Call: {call_time:%Y-%m-%d %H:%M %Z}")
+            for label, name, currency in (("EPS", "Earnings", main), ("Revenue", "Revenue", reported)):
+                estimate = _estimate(calendar, name, currency)
+                if estimate:
+                    lines.append(f"Next Quarter {label} Estimate: {estimate}")
+
+    target = info.get("targetMeanPrice")
+    if target is not None:
+        lines.append(f"Analyst Target Mean: {_with_unit(target, quote)}")
+    low, high, median = (info.get(k) for k in ("targetLowPrice", "targetHighPrice", "targetMedianPrice"))
+    if low is not None and high is not None:
+        lines.append(f"Analyst Target Range: {low} - {_with_unit(high, quote)}"
+                     + (f" (median {median})" if median is not None else ""))
+    rating = info.get("recommendationKey")
+    if rating and rating != "none":
+        mean = info.get("recommendationMean")
+        scale = f" (mean {mean}, 1 strong buy - 5 strong sell)" if mean is not None else ""
+        lines.append(f"Analyst Recommendation: {rating}{scale}")
+    opinions = info.get("numberOfAnalystOpinions")
+    if opinions:
+        lines.append(f"Number of Analyst Opinions: {opinions}")
+    return lines
 
 
 def _statement(ticker, freq, as_of_date, title, quarterly_attr, annual_attr) -> str:

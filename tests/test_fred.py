@@ -54,6 +54,12 @@ class FredResolutionTests(unittest.TestCase):
         self.assertEqual(fred._resolve_series_id("cpi"), "CPIAUCSL")
         self.assertEqual(fred._resolve_series_id("unemployment"), "UNRATE")
 
+    def test_bill_yield_aliases_map_to_constant_maturity_series(self):
+        # The cash rate a position competes with: 3-month bill and 1-year note.
+        self.assertEqual(fred._resolve_series_id("3m_tbill"), "DGS3MO")
+        self.assertEqual(fred._resolve_series_id("3m_treasury"), "DGS3MO")
+        self.assertEqual(fred._resolve_series_id("1y_treasury"), "DGS1")
+
     def test_alias_is_case_and_separator_insensitive(self):
         self.assertEqual(fred._resolve_series_id("Fed Funds Rate"), "FEDFUNDS")
         self.assertEqual(fred._resolve_series_id("10y-treasury"), "DGS10")
