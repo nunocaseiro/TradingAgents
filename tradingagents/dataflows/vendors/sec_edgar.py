@@ -23,6 +23,7 @@ import os
 import time
 from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -49,6 +50,7 @@ _SUBMISSIONS_MEMO: dict[str, tuple[float, dict]] = {}
 
 # The filings that add statement facts; amendments ("10-Q/A") count too.
 _REPORT_FORMS = ("10-Q", "10-K", "20-F", "40-F")
+_SEC_TZ = ZoneInfo("America/New_York")
 
 # Line items, each with the tags filers use for it, best first. First match wins
 # and values are never summed across tags: a company reporting revenue under two
@@ -135,7 +137,8 @@ def _cached_json(url: str, name: str, is_current=None) -> dict:
     if path.exists() and time.time() - path.stat().st_mtime < _CACHE_TTL_SECONDS:
         try:
             cached = json.loads(path.read_text(encoding="utf-8"))
-            fetched_day = datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d")
+            # SEC dates filings in New York time, so the cache's day is read there too.
+            fetched_day = datetime.fromtimestamp(path.stat().st_mtime, _SEC_TZ).strftime("%Y-%m-%d")
             if is_current is None or is_current(cached, fetched_day):
                 return cached
         except ValueError:
@@ -162,15 +165,18 @@ def _latest_report_date(cik: str) -> str | None:
     Unknown is not an error: the cached facts are served as before.
     """
     memo = _SUBMISSIONS_MEMO.get(cik)
-    if memo is None or time.time() - memo[0] >= _SUBMISSIONS_TTL_SECONDS:
+    if memo is None or time.monotonic() - memo[0] >= _SUBMISSIONS_TTL_SECONDS:
         try:
-            memo = (time.time(), _fetch_json(_SUBMISSIONS_URL.format(cik=cik)))
+            memo = (time.monotonic(), _fetch_json(_SUBMISSIONS_URL.format(cik=cik)))
         except VendorUnavailableError:
             return None
         _SUBMISSIONS_MEMO[cik] = memo
-    recent = (memo[1].get("filings") or {}).get("recent") or {}
-    dates = [filed for form, filed in zip(recent.get("form") or [], recent.get("filingDate") or [], strict=False)
-             if form.startswith(_REPORT_FORMS)]
+    try:
+        recent = (memo[1].get("filings") or {}).get("recent") or {}
+        dates = [filed for form, filed in zip(recent.get("form") or [], recent.get("filingDate") or [], strict=False)
+                 if isinstance(form, str) and isinstance(filed, str) and form.startswith(_REPORT_FORMS)]
+    except AttributeError:  # an index of an unexpected shape
+        return None
     return max(dates, default=None)
 
 
