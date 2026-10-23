@@ -161,7 +161,9 @@ def build_default_config() -> dict:
             # Statements come from SEC EDGAR as filed (US filers), then Yahoo; the
         # overview and insider tools, which SEC EDGAR does not serve, from Yahoo.
         "fundamental_data": "sec_edgar,yfinance",  # Options: sec_edgar, alpha_vantage, yfinance
-            "news_data": "yfinance",             # Options: alpha_vantage, yfinance
+            # TRADINGAGENTS_NEWS_VENDOR sets the chain from a launcher, e.g.
+            # "finnhub,yfinance" for article summaries (needs FINNHUB_API_KEY).
+            "news_data": os.getenv("TRADINGAGENTS_NEWS_VENDOR") or "yfinance",  # Options: finnhub, alpha_vantage, yfinance
             "macro_data": "fred",                # Options: fred (needs FRED_API_KEY)
             "prediction_markets": "polymarket",  # Options: polymarket (keyless)
         },
