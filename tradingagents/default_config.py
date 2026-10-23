@@ -161,15 +161,18 @@ def build_default_config() -> dict:
             # Statements come from SEC EDGAR as filed (US filers), then Yahoo; the
         # overview and insider tools, which SEC EDGAR does not serve, from Yahoo.
         "fundamental_data": "sec_edgar,yfinance",  # Options: sec_edgar, alpha_vantage, yfinance
-            # TRADINGAGENTS_NEWS_VENDOR sets the chain from a launcher, e.g.
-            # "finnhub,yfinance" for article summaries (needs FINNHUB_API_KEY).
-            "news_data": os.getenv("TRADINGAGENTS_NEWS_VENDOR") or "yfinance",  # Options: finnhub, alpha_vantage, yfinance
+            "news_data": "yfinance",             # Options: alpha_vantage, yfinance (get_news also: finnhub)
             "macro_data": "fred",                # Options: fred (needs FRED_API_KEY)
             "prediction_markets": "polymarket",  # Options: polymarket (keyless)
         },
         # Tool-level configuration (takes precedence over category-level)
         "tool_vendors": {
             # Example: "get_stock_data": "alpha_vantage",  # Override category default
+            # TRADINGAGENTS_NEWS_VENDOR sets the company news chain from a launcher,
+            # e.g. "finnhub,yfinance" for article summaries (needs FINNHUB_API_KEY).
+            # Keep a fallback in it: Finnhub's free plan refuses non-US listings.
+            **({"get_news": os.environ["TRADINGAGENTS_NEWS_VENDOR"]}
+               if os.getenv("TRADINGAGENTS_NEWS_VENDOR") else {}),
         },
         # Benchmark for alpha calculation in the reflection layer.
         # ``benchmark_ticker`` (when set) overrides the suffix map for all

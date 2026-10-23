@@ -125,17 +125,31 @@ def test_without_a_key_the_vendor_is_not_configured(monkeypatch):
 
 
 @pytest.mark.unit
-def test_the_news_vendor_chain_can_be_set_from_the_environment(monkeypatch):
+def test_the_company_news_chain_can_be_set_from_the_environment(monkeypatch):
     # The built-in default stays Yahoo; a launcher picks Finnhub first without
     # editing code (#1467 asked for this).
     monkeypatch.setenv("TRADINGAGENTS_NEWS_VENDOR", "finnhub,yfinance")
-    assert default_config.build_default_config()["data_vendors"]["news_data"] == "finnhub,yfinance"
+    assert default_config.build_default_config()["tool_vendors"]["get_news"] == "finnhub,yfinance"
+
+
+@pytest.mark.unit
+def test_the_variable_leaves_the_other_news_tools_on_their_vendor(monkeypatch):
+    # Finnhub serves company news only; global news and insider trades must not
+    # be routed to a chain with no vendor for them, even when it names Finnhub alone.
+    monkeypatch.setenv("TRADINGAGENTS_NEWS_VENDOR", "finnhub")
+    config = default_config.build_default_config()
+    assert config["data_vendors"]["news_data"] == "yfinance"
+    set_config(config)
+    assert router.get_vendor("news_data", "get_global_news") == "yfinance"
+    assert router.get_vendor("news_data", "get_insider_transactions") == "yfinance"
 
 
 @pytest.mark.unit
 def test_without_the_variable_news_keeps_the_built_in_vendor(monkeypatch):
     monkeypatch.delenv("TRADINGAGENTS_NEWS_VENDOR", raising=False)
-    assert default_config.build_default_config()["data_vendors"]["news_data"] == "yfinance"
+    config = default_config.build_default_config()
+    assert config["data_vendors"]["news_data"] == "yfinance"
+    assert "get_news" not in config["tool_vendors"]
 
 
 @pytest.mark.unit
