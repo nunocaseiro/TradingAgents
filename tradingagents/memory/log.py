@@ -36,7 +36,7 @@ class TradingMemoryLog:
         final_trade_decision: str,
         rating: str | None = None,
     ) -> None:
-        """Append pending entry at end of propagate(). No LLM call.
+        """Append pending entry at end of propagate(), or replace the day's pending one. No LLM call.
 
         ``rating`` is the decision's own rating when the caller has it; without
         one it is read from the decision text.
@@ -44,20 +44,31 @@ class TradingMemoryLog:
         if not self._log_path:
             return
         with locked(self._log_path):
-            # Idempotency guard: fast raw-text scan instead of full parse. Any entry
-            # for this ticker and date blocks another, pending or settled: a re-run
-            # after the outcome landed would otherwise count the same decision twice
-            # in past context and in every aggregate over the log.
-            if self._log_path.exists():
-                raw = self._log_path.read_text(encoding="utf-8")
-                for line in raw.splitlines():
-                    if line.startswith(f"[{trade_date} | {ticker} |") and line.endswith("]"):
-                        return
             rating = rating or parse_rating(final_trade_decision)
             tag = f"[{trade_date} | {ticker} | {rating} | pending]"
-            entry = f"{tag}\n\nDECISION:\n{final_trade_decision}{self._SEPARATOR}"
+            body = f"{tag}\n\nDECISION:\n{final_trade_decision}"
+            prefix = f"[{trade_date} | {ticker} |"
+            # One entry per ticker and date, so no decision counts twice in past
+            # context or in an aggregate over the log. A settled entry blocks a
+            # re-run. A pending one has fed no outcome or reflection yet, so the
+            # day's latest run replaces it: a re-run is made with newer data or a
+            # longer debate, and the earlier decision should not be the one kept.
+            if self._log_path.exists():
+                raw = self._log_path.read_text(encoding="utf-8")
+                blocks = raw.split(self._SEPARATOR)
+                for i, block in enumerate(blocks):
+                    tag_line = block.strip().split("\n", 1)[0].strip()
+                    if not (tag_line.startswith(prefix) and tag_line.endswith("]")):
+                        continue
+                    if not tag_line.endswith("| pending]"):
+                        return
+                    blocks[i] = block[: len(block) - len(block.lstrip())] + body
+                    tmp_path = self._log_path.with_suffix(".tmp")
+                    tmp_path.write_text(self._SEPARATOR.join(blocks), encoding="utf-8")
+                    tmp_path.replace(self._log_path)
+                    return
             with open(self._log_path, "a", encoding="utf-8") as f:
-                f.write(entry)
+                f.write(f"{body}{self._SEPARATOR}")
 
     def settling(self, wait: bool = True):
         """Hold the log for one settlement pass at a time, across threads and processes.
