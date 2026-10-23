@@ -121,7 +121,13 @@ def get_news_yfinance(
     # Keep only articles within the requested window (look-ahead safe).
     in_range = [a for a in articles if in_window(a["pub_date"], start_dt, end_dt)]
     if in_range:
-        return f"## {ticker}{resolved} News, from {start_date} to {end_date}:\n\n{_format_articles(in_range)}"
+        # Search articles have a title and a link but no summary, so say so
+        # before the analyst reads content into the titles.
+        note = ("" if feed else
+                "_Yahoo's quote news feed is empty, so these are Yahoo search results: "
+                "headlines only, with no article text. Report them as headlines and "
+                "do not infer what the articles say._\n\n")
+        return f"## {ticker}{resolved} News, from {start_date} to {end_date}:\n\n{note}{_format_articles(in_range)}"
 
     if not feed:
         return (f"<Yahoo Finance news unavailable for {start_date}..{end_date}: Yahoo search "

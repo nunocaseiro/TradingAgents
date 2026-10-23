@@ -298,6 +298,27 @@ def test_a_search_with_articles_has_answered_even_without_listing_the_symbol(mon
 
 
 @pytest.mark.unit
+def test_search_articles_are_marked_as_headlines_only(monkeypatch):
+    # Search articles carry a title and a link, no summary, so the analyst must
+    # be told the content is not there rather than read it into the titles.
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    _ticker_with([], monkeypatch, search_news=[_tagged("ABOUT AAPL", today, "AAPL")])
+    out = ynews.get_news_yfinance("AAPL", today, today)
+    assert "headlines only" in out and "do not infer" in out
+    assert out.index("headlines only") < out.index("ABOUT AAPL")
+
+
+@pytest.mark.unit
+def test_quote_feed_articles_are_not_marked_as_headlines_only(monkeypatch):
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    article = {"content": {"title": "FEED AAPL", "summary": "Body.", "pubDate": f"{today}T12:00:00Z",
+                           "provider": {"displayName": "P"}}}
+    _ticker_with([article], monkeypatch)
+    out = ynews.get_news_yfinance("AAPL", today, today)
+    assert "FEED AAPL" in out and "headlines only" not in out
+
+
+@pytest.mark.unit
 def test_a_search_yahoo_answers_with_not_found_is_an_outage(monkeypatch):
     from tradingagents.dataflows.errors import VendorUnavailableError
 
