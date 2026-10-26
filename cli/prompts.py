@@ -187,6 +187,32 @@ def select_analysts(asset_type: AssetType = AssetType.STOCK, default=None) -> li
     return choices
 
 
+def select_profile(default=None) -> str:
+    """Select the run profile: a bundle of analysts, depth, horizon and memory log."""
+    from cli.profiles import PROFILES
+
+    options = [(profile.label, key) for key, profile in PROFILES.items()]
+    choice = questionary.select(
+        "Select Your [Profile]:",
+        choices=[questionary.Choice(display, value=value) for display, value in options],
+        default=_matching_choice(options, default),
+        instruction="\n- Use arrow keys to navigate\n- Press Enter to select",
+        style=questionary.Style(
+            [
+                ("selected", "fg:yellow noinherit"),
+                ("highlighted", "fg:yellow noinherit"),
+                ("pointer", "fg:yellow noinherit"),
+            ]
+        ),
+    ).ask()
+
+    if choice is None:
+        console.print("\n[red]No profile selected. Exiting...[/red]")
+        exit(1)
+
+    return choice
+
+
 def select_research_depth(default=None) -> int:
     """Select research depth using an interactive selection."""
 

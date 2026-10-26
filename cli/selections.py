@@ -23,6 +23,7 @@ from cli.prompts import (
     ask_qwen_region,
     confirm_ollama_endpoint,
     detect_asset_type,
+    filter_analysts_for_asset_type,
     ensure_api_key,
     ensure_signed_in,
     get_ticker,
@@ -34,9 +35,11 @@ from cli.prompts import (
     select_analysts,
     select_deep_thinking_agent,
     select_llm_provider,
+    select_profile,
     select_research_depth,
     select_shallow_thinking_agent,
 )
+from cli.profiles import get_profile
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.llm_clients.factory import REASONING_EFFORT_PROVIDERS
 from tradingagents.llm_clients.openai_client import check_endpoint
@@ -58,17 +61,25 @@ def depth_from_env() -> bool:
 def unattended_gaps(flags) -> list[str]:
     """The flags and environment variables a run with no terminal still needs."""
     env = os.environ.get
-    gaps = [f"--{name}" for name in ("ticker", "date", "analysts") if flags.get(name) is None]
+    profile = _profile_key(flags)
+    fixed = profile in ("pote", "buffett")
+    names = ("ticker", "date") if fixed else ("ticker", "date", "analysts")
+    gaps = [f"--{name}" for name in names if flags.get(name) is None]
     gaps += [f"--{name} or --no-{name}" for name in ("save", "show") if flags.get(name) is None]
     if not env("TRADINGAGENTS_OUTPUT_LANGUAGE"):
         gaps.append("TRADINGAGENTS_OUTPUT_LANGUAGE")
-    if not depth_from_env():
+    if not depth_from_env() and not fixed:
         gaps.append("TRADINGAGENTS_MAX_DEBATE_ROUNDS and TRADINGAGENTS_MAX_RISK_ROUNDS")
     if not env("TRADINGAGENTS_LLM_PROVIDER"):
         gaps.append("TRADINGAGENTS_LLM_PROVIDER")
     if not (env("TRADINGAGENTS_QUICK_THINK_LLM") or env("TRADINGAGENTS_DEEP_THINK_LLM")):
         gaps.append("TRADINGAGENTS_QUICK_THINK_LLM or TRADINGAGENTS_DEEP_THINK_LLM")
     return gaps
+
+
+def _profile_key(flags) -> str | None:
+    """The profile named by --profile or TRADINGAGENTS_PROFILE, flag first."""
+    return (flags.get("profile") or os.environ.get("TRADINGAGENTS_PROFILE") or "").strip().lower() or None
 
 
 def _check_tier_providers(main_provider: str, backend_url: str | None = None) -> None:
@@ -214,9 +225,27 @@ def _prompt_selections(prefs, flags):
         )
         output_language = ask_output_language(prefs.get("output_language"))
 
-    # Step 4: Select analysts
+    # Profile (--profile or TRADINGAGENTS_PROFILE skips the question). A fixed
+    # profile sets the analysts and the research depth, so those steps are skipped.
     prefs = sanitize(prefs, asset_type.value)
-    if flags.get("analysts") is not None:
+    profile_key = _profile_key(flags)
+    if profile_key:
+        profile_key = _from_flag(lambda key: get_profile(key).key, profile_key)
+        console.print(f"[green]✓ Profile from flag or environment:[/green] {profile_key}")
+    elif flags.get("analysts") is None:
+        console.print(
+            create_question_box(
+                "Profile", "Select the profile: it sets the analysts, depth, horizon and memory log"
+            )
+        )
+        profile_key = select_profile(prefs.get("profile"))
+    profile = get_profile(profile_key) if profile_key else None
+
+    # Step 4: Select analysts
+    if profile and profile.analysts and flags.get("analysts") is None:
+        selected_analysts = filter_analysts_for_asset_type(list(profile.analysts), asset_type)
+        console.print(f"[green]✓ Analysts from profile {profile.key}[/green]")
+    elif flags.get("analysts") is not None:
         selected_analysts = _from_flag(parse_analysts, flags["analysts"], asset_type)
     else:
         console.print(
@@ -233,7 +262,10 @@ def _prompt_selections(prefs, flags):
     # Research depth maps to the debate + risk round counts; when both are
     # supplied through TRADINGAGENTS_MAX_DEBATE_ROUNDS / _MAX_RISK_ROUNDS we keep
     # the run non-interactive and honor the env values (#977).
-    if depth_from_env():
+    if profile and profile.rounds and not depth_from_env():
+        selected_research_depth = profile.rounds
+        console.print(f"[green]✓ Research depth from profile {profile.key}:[/green] {profile.rounds} rounds")
+    elif depth_from_env():
         selected_research_depth = DEFAULT_CONFIG["max_debate_rounds"]
         console.print(
             f"[green]✓ Research depth from environment:[/green] "
@@ -368,6 +400,7 @@ def _prompt_selections(prefs, flags):
         "openai_reasoning_effort": reasoning_effort,
         "anthropic_effort": anthropic_effort,
         "output_language": output_language,
+        "profile": profile_key,
     }
 
 
