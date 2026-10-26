@@ -26,6 +26,7 @@ from cli.selections import depth_from_env, get_user_selections, unattended_gaps
 from cli.stats_handler import StatsCallbackHandler
 from tradingagents.agents.rating import is_review, run_rating
 from tradingagents.dataflows.symbols import safe_ticker_component
+from cli.profiles import apply_profile
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.analyst_execution import (
     build_analyst_execution_plan,
@@ -89,6 +90,9 @@ def _build_run_config(selections: dict, checkpoint: bool | None) -> dict:
         if selections.get(key) is not None:
             config[key] = selections[key]
     config["output_language"] = selections.get("output_language", "English")
+    # A profile sets the scoring horizon, benchmark and where memory and reports
+    # live; explicit TRADINGAGENTS_* variables still win over it.
+    apply_profile(config, selections.get("profile"))
     # --checkpoint/--no-checkpoint overrides only when explicitly given; omitting
     # the flag preserves TRADINGAGENTS_CHECKPOINT_ENABLED / the default (#976).
     if checkpoint is not None:

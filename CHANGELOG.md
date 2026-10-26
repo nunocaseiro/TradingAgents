@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Changes that need action when upgrading are listed under "Upgrading from" in their release.
 
+## [Unreleased]
+
+### Added
+
+- **Run profiles.** The CLI asks for a profile (`pote`, `buffett` or `livre`; also `--profile` or `TRADINGAGENTS_PROFILE`). A profile sets the analyst team, the debate depth, the scoring horizon and its benchmark, and keeps its own memory log and reports directory, so decisions scored over different horizons never share a log. Agent prompts are the same under every profile.
+- **`TRADINGAGENTS_HOLDING_PERIOD_DAYS`** sets `holding_period_days` from the environment.
+
 ## [0.7.0] — 2026-10-16
 
 Runs on your ChatGPT plan, backtests scored from the first close after each decision, a note at start-up when a newer release is out, and a wheel attached to each GitHub release.

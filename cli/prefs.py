@@ -28,7 +28,7 @@ from tradingagents.llm_clients.model_catalog import get_model_options
 _PREFS_PATH = Path(os.path.expanduser("~")) / ".tradingagents" / "cli_prefs.json"
 
 REMEMBERED = (
-    "output_language", "analysts", "research_depth", "llm_provider",
+    "profile", "output_language", "analysts", "research_depth", "llm_provider",
     "quick_think_llm", "deep_think_llm", "backend_url",
 )
 
@@ -50,6 +50,12 @@ def save_last_run(selections: dict) -> None:
     """Record the answers worth offering next time; failure is never fatal."""
     kept = {k: v for k, v in selections.items() if k in REMEMBERED and v not in (None, "", [])}
     kept["analysts"] = [getattr(a, "value", a) for a in kept.get("analysts", [])] or None
+    # A fixed profile chose the analysts and depth, not the user: keep the free
+    # answers for the next free run.
+    if kept.get("profile") in ("pote", "buffett"):
+        previous = load_last_run()
+        for key in ("analysts", "research_depth"):
+            kept[key] = previous.get(key)
     kept = {k: v for k, v in kept.items() if v is not None}
     try:
         _PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -62,6 +68,8 @@ def save_last_run(selections: dict) -> None:
 def sanitize(prefs: dict, asset_type) -> dict:
     """Keep only the remembered answers that are still choosable now."""
     kept: dict = {}
+    if prefs.get("profile") in ("pote", "buffett", "livre"):
+        kept["profile"] = prefs["profile"]
     if isinstance(prefs.get("output_language"), str):
         kept["output_language"] = prefs["output_language"]
     if prefs.get("research_depth") in (1, 3, 5):
