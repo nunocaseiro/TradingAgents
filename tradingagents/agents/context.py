@@ -12,18 +12,22 @@ logger = logging.getLogger(__name__)
 
 
 def get_language_instruction() -> str:
-    """Return a prompt instruction for the configured output language.
+    """Return the prompt suffix for the configured output language and extra instruction.
 
-    Returns empty string when English (default), so no extra tokens are used.
+    The language part is empty when English (default), so no extra tokens are used.
     Applied to every agent whose output reaches the saved report —
     analysts, researchers, debaters, research manager, trader, and
     portfolio manager — so a non-English run produces a fully localized
-    report rather than a mix of languages.
+    report rather than a mix of languages. ``extra_instruction`` (empty by
+    default) rides the same path, so one setting reaches every agent.
     """
     from tradingagents.dataflows.config import get_config
-    lang = get_config().get("output_language", "English")
+    cfg = get_config()
+    extra = (cfg.get("extra_instruction") or "").strip()
+    suffix = f" {extra}" if extra else ""
+    lang = cfg.get("output_language", "English")
     if lang.strip().lower() == "english":
-        return ""
+        return suffix
     # The labelled lines are read by the program, so they keep their English
     # label and value: a translated rating line leaves the reader prose to
     # search, where a negated rating ("not a Sell") reads as the call (#1435).
@@ -31,7 +35,7 @@ def get_language_instruction() -> str:
         f" Write your entire response in {lang}, except the labelled lines the format"
         f" asks for (the \"**Rating**:\" line, \"FINAL TRANSACTION PROPOSAL:\"):"
         f" keep their label and value in English, exactly as specified."
-    )
+    ) + suffix
 
 
 def opponent_argument_or_opening(text: str, opponent: str) -> str:
