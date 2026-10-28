@@ -62,7 +62,7 @@ def unattended_gaps(flags) -> list[str]:
     """The flags and environment variables a run with no terminal still needs."""
     env = os.environ.get
     profile = _profile_key(flags)
-    fixed = profile in ("pote", "buffett")
+    fixed = profile == "buffett"
     names = ("ticker", "date") if fixed else ("ticker", "date", "analysts")
     gaps = [f"--{name}" for name in names if flags.get(name) is None]
     gaps += [f"--{name} or --no-{name}" for name in ("save", "show") if flags.get(name) is None]

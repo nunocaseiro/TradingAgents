@@ -10,9 +10,13 @@ Changes that need action when upgrading are listed under "Upgrading from" in the
 
 ### Added
 
-- **Run profiles.** The CLI asks for a profile (`pote`, `buffett` or `livre`; also `--profile` or `TRADINGAGENTS_PROFILE`). A profile sets the analyst team, the debate depth, the scoring horizon and its benchmark, and keeps its own memory log and reports directory, so decisions scored over different horizons never share a log. Agent prompts are the same under every profile.
+- **Run profiles.** The CLI asks for a profile (`buffett` or `livre`; also `--profile` or `TRADINGAGENTS_PROFILE`). A profile sets the analyst team, the debate depth, the scoring horizon and its benchmark, and keeps its own memory log and reports directory, so decisions scored over different horizons never share a log. Agent prompts are the same under every profile.
 - **`TRADINGAGENTS_EXTRA_INSTRUCTION`** (`extra_instruction`) appends one sentence to every agent's prompt, for controlled experiments. Empty by default: prompts are unchanged.
 - **`TRADINGAGENTS_HOLDING_PERIOD_DAYS`** sets `holding_period_days` from the environment.
+
+### Removed
+
+- The `pote` profile (momentum ideas, 2 rounds, ~63 days vs SPY): the radar-market momentum pot was closed. A saved `pote` choice is ignored and `--profile pote` is an unknown profile.
 
 ## [0.7.1] — 2026-10-27
 
