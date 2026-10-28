@@ -22,6 +22,7 @@ from pathlib import Path
 
 from cli.models import AnalystType, AssetType
 from cli.prompts import LISTED_LIVE, _llm_provider_table, filter_analysts_for_asset_type
+from cli.profiles import PROFILES
 from tradingagents.dataflows.files import replace_file
 from tradingagents.llm_clients.model_catalog import get_model_options
 
@@ -52,7 +53,7 @@ def save_last_run(selections: dict) -> None:
     kept["analysts"] = [getattr(a, "value", a) for a in kept.get("analysts", [])] or None
     # A fixed profile chose the analysts and depth, not the user: keep the free
     # answers for the next free run.
-    if kept.get("profile") in ("pote", "buffett"):
+    if kept.get("profile") == "buffett":
         previous = load_last_run()
         for key in ("analysts", "research_depth"):
             kept[key] = previous.get(key)
@@ -68,7 +69,7 @@ def save_last_run(selections: dict) -> None:
 def sanitize(prefs: dict, asset_type) -> dict:
     """Keep only the remembered answers that are still choosable now."""
     kept: dict = {}
-    if prefs.get("profile") in ("pote", "buffett", "livre"):
+    if prefs.get("profile") in PROFILES:
         kept["profile"] = prefs["profile"]
     if isinstance(prefs.get("output_language"), str):
         kept["output_language"] = prefs["output_language"]

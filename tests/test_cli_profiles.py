@@ -1,4 +1,4 @@
-"""Run profiles (pote / buffett / livre) and the configurable scoring horizon."""
+"""Run profiles (buffett / livre) and the configurable scoring horizon."""
 
 from __future__ import annotations
 
@@ -29,12 +29,9 @@ def test_holding_period_comes_from_the_environment(monkeypatch):
 
 
 @pytest.mark.unit
-def test_pote_profile_config():
-    config = apply_profile(build_default_config(), "pote")
-    assert config["holding_period_days"] == 63
-    assert config["benchmark_ticker"] == "SPY"
-    assert config["memory_log_path"] == "memory/pote_memory.md"
-    assert config["results_dir"] == "reports/pote"
+def test_the_pote_profile_was_removed():
+    with pytest.raises(ValueError):
+        get_profile("pote")
 
 
 @pytest.mark.unit
@@ -80,9 +77,8 @@ def test_profile_names():
 
 @pytest.mark.unit
 def test_profile_analysts():
-    assert set(get_profile("pote").analysts) == set(AnalystType)
     assert get_profile("buffett").analysts == (AnalystType.NEWS, AnalystType.FUNDAMENTALS)
-    assert get_profile("pote").rounds == 2 and get_profile("buffett").rounds == 5
+    assert get_profile("buffett").rounds == 5
 
 
 @pytest.mark.unit

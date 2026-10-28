@@ -32,10 +32,6 @@ class Profile:
 
 
 PROFILES = {
-    "pote": Profile(
-        "pote", "Pote - momentum ideas of 3-12 months (4 analysts, 2 rounds, ~63 days vs SPY)",
-        tuple(AnalystType), 2, 63, "SPY", "memory/pote_memory.md", "reports/pote",
-    ),
     "buffett": Profile(
         "buffett", "Buffett - long-term holdings (news + fundamentals, 5 rounds, ~252 days vs VT)",
         (AnalystType.NEWS, AnalystType.FUNDAMENTALS), 5, 252, "VT",

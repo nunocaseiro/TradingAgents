@@ -59,7 +59,7 @@ def analyze(
         None, "--analysts", help="Comma-separated analysts, e.g. market,news; skips the prompt"
     ),
     profile: str = typer.Option(
-        None, "--profile", help="Run profile: pote, buffett or livre; skips the prompt"
+        None, "--profile", help="Run profile: buffett or livre; skips the prompt"
     ),
     save: bool | None = typer.Option(
         None, "--save/--no-save", help="Save the report under results_dir without asking"
